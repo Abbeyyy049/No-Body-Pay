@@ -2,7 +2,9 @@
 
 台灣與澳洲（QLD 昆士蘭）雙地區計程車跳表模擬器，純前端網頁、無需安裝、無後端伺服器，可加入手機主畫面當作 App 使用。
 
-🔗 **線上使用：** https://abbeyyy049.github.io/No-Body-Pay/
+🔗 **線上使用：** `https://<你的GitHub帳號>.github.io/<repo名稱>/`
+（部署完成後請把這行換成你的實際網址）
+
 ---
 
 ## ✨ 功能
@@ -25,6 +27,39 @@
 - **GPS 定位功能需要瀏覽器原生支援**，且必須在獨立瀏覽器分頁中開啟（不能在某些 App 內建的 WebView/iframe 預覽環境中使用，否則瀏覽器不會跳出定位授權請求）。
 - **資料儲存在瀏覽器本機（localStorage）**，僅限同一台裝置、同一個瀏覽器有效。清除瀏覽器資料、換瀏覽器、換裝置都會遺失行程記錄與設定，本專案沒有雲端同步或帳號系統。
 - 澳洲 QLD 費率為 2025/7/1 公告生效之費率，台灣費率為市區常見費率之示意值，兩者皆僅供參考，實際費率請以當地監理機關／計程車業者公告為準，且費率可能隨時間調整。
+
+## 📁 檔案結構
+
+```
+repo/
+├── index.html              ← 主程式（GitHub Pages 預設首頁）
+├── manifest.json            ← PWA 設定（Android 加入主畫面用）
+├── apple-touch-icon.png     ← iOS 加入主畫面圖示 (180×180)
+├── favicon.ico               ← 瀏覽器分頁圖示（相容舊版）
+├── favicon-32x32.png
+├── favicon-16x16.png
+├── icons/
+│   ├── icon-192.png          ← Android PWA 圖示
+│   └── icon-512.png          ← Android PWA 圖示（高解析度）
+├── README.md
+├── LICENSE
+└── .gitignore
+```
+
+## 🎨 更換 App 圖示
+
+如果之後想換掉圖示，準備好新圖後，依序替換以下檔案（**檔名要完全一樣**才會被網頁正確讀取）：
+
+| 檔案 | 用途 | 建議尺寸 |
+|---|---|---|
+| `apple-touch-icon.png` | iPhone/iPad 加入主畫面 | 180×180 |
+| `icons/icon-192.png` | Android 加入主畫面 | 192×192 |
+| `icons/icon-512.png` | Android 加入主畫面（高解析度） | 512×512 |
+| `favicon-32x32.png` / `favicon-16x16.png` / `favicon.ico` | 瀏覽器分頁小圖示 | 32×32 / 16×16 |
+
+替換後直接在 GitHub 網頁上傳同名檔案覆蓋即可（上傳方式同更新 `index.html` 的步驟），不需要改 `index.html` 或 `manifest.json` 的程式碼，因為都是用檔名對應的。
+
+> 小提醒：瀏覽器跟手機系統對圖示有快取，換完圖示後如果手機上看起來沒變，試著把已加入主畫面的捷徑刪除、清除 Safari/Chrome 快取，再重新「加入主畫面」一次。
 
 ## 🚀 部署到 GitHub Pages
 
