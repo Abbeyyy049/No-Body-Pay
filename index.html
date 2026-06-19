@@ -1,0 +1,1710 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="計程車跳表">
+<meta name="theme-color" content="#000000">
+<meta name="description" content="台灣與澳洲QLD雙地區計程車跳表模擬器，支援GPS定位計費、多人分攤車資、友情價折扣、行程記錄">
+<meta property="og:title" content="計程車跳表 🚕 雙地區咪錶">
+<meta property="og:description" content="台灣與澳洲QLD雙地區計程車跳表模擬器，支援GPS定位計費、多人分攤車資、友情價折扣">
+<meta property="og:type" content="website">
+<title>計程車跳表 🚕 雙地區咪錶</title>
+<style>
+  @font-face {
+    font-family: 'DSEG';
+    src: local('Courier New');
+  }
+
+  :root{
+    --bg: #050505;
+    --panel: #0c0c0c;
+    --bezel: #1a1a1a;
+    --lcd-bg: #0a1206;
+    --lcd-on: #ff2a1a;
+    --lcd-on-dim: #5a0e08;
+    --lcd-amber: #ffb000;
+    --accent: #ff2a1a;
+    --accent-dim: #4a1a14;
+    --key: #181818;
+    --key-edge: #303030;
+    --text-dim: #6a6a6a;
+  }
+  [data-region="AU"]{
+    --lcd-on: #2ad4ff;
+    --lcd-on-dim: #0a3a4a;
+    --lcd-amber: #ffd23f;
+    --accent: #2ad4ff;
+    --accent-dim: #123540;
+    --lcd-bg: #04141a;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; user-select:none; }
+  html,body{ height:100%; margin:0; background:#000; overscroll-behavior:none; }
+  body{
+    font-family: 'SF Mono','Courier New',monospace;
+    color:#ddd;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    min-height:100dvh;
+    padding:10px;
+  }
+  @media (orientation: portrait){
+    body{ padding:0; align-items:flex-start; }
+  }
+
+  .rotate-notice{
+    position:fixed; inset:0; background:#000; z-index:999;
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; color:#888; text-align:center; padding:20px;
+  }
+  .rotate-notice .icon{ font-size:42px; }
+  .rotate-notice.show{ display:flex; }
+
+  .meter-wrap{
+    width:100%;
+    max-width:760px;
+  }
+
+  /* Landscape gets a wider cap, matching the original dashboard feel */
+  @media (orientation: landscape){
+    .meter-wrap{ max-width:1000px; }
+  }
+
+  .device{
+    background: linear-gradient(180deg, var(--bezel), #000);
+    border-radius: 18px;
+    padding: 18px 18px 14px;
+    box-shadow: 0 30px 60px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.04);
+    border: 1px solid #2a2a2a;
+  }
+  /* Portrait: edge-to-edge full-bleed device, no card framing */
+  @media (orientation: portrait){
+    .meter-wrap{ max-width:none; }
+    .device{
+      border-radius:0;
+      border-left:none; border-right:none;
+      min-height:100dvh;
+      padding-top: max(14px, env(safe-area-inset-top));
+      padding-left: max(14px, env(safe-area-inset-left));
+      padding-right: max(14px, env(safe-area-inset-right));
+      padding-bottom: max(14px, env(safe-area-inset-bottom));
+      box-shadow:none;
+      display:flex;
+      flex-direction:column;
+    }
+    .lcd{ flex:0 0 auto; }
+    .keys:last-of-type{ margin-top:auto; }
+  }
+
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px; padding: 0 4px;
+  }
+  .brand{
+    font-size:11px; letter-spacing:3px; color:var(--text-dim); font-weight:700;
+  }
+  .brand b{ color: var(--accent); }
+  .region-pill{
+    font-size:10px; letter-spacing:2px; color:#000; background:var(--accent);
+    padding:3px 10px; border-radius:20px; font-weight:800;
+  }
+  .gear-btn{
+    background:none; border:1px solid #333; color:#999; border-radius:50%;
+    width:30px; height:30px; font-size:15px; line-height:1; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  .lcd{
+    background: var(--lcd-bg);
+    border-radius: 8px;
+    padding: 14px 16px;
+    box-shadow: inset 0 0 18px rgba(0,0,0,.8), inset 0 2px 4px rgba(0,0,0,.6);
+    display:grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 10px 16px;
+  }
+  @media (max-width: 520px) and (orientation: portrait){
+    .lcd{ grid-template-columns: 1fr 1fr; }
+    .lcd-main{ grid-column: 1 / -1; grid-row: auto; }
+  }
+
+  .seg{
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    color: var(--lcd-on);
+    text-shadow: 0 0 6px var(--lcd-on), 0 0 14px var(--lcd-on);
+    letter-spacing: 1px;
+    line-height: 1;
+    position: relative;
+  }
+  .seg .ghost{
+    position:absolute; inset:0; color: var(--lcd-on-dim); text-shadow:none; z-index:-1;
+  }
+  .lcd-cell{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .lcd-label{
+    font-size: 10px; letter-spacing: 2px; color: var(--lcd-amber);
+    text-shadow: 0 0 4px var(--lcd-amber);
+    opacity:.85;
+  }
+  .lcd-main .seg{ font-size: clamp(30px, 5.4vw, 52px); }
+  .lcd-main { grid-row: span 2; display:flex; flex-direction:column; justify-content:center; }
+  .lcd-sub .seg{ font-size: clamp(18px, 2.6vw, 26px); }
+  .unit{ font-size: 12px; color: var(--lcd-amber); opacity:.8; margin-left:4px; letter-spacing:1px; }
+
+  .badges{
+    grid-column: 1 / -1;
+    display:flex; gap:14px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.06);
+    flex-wrap:wrap;
+  }
+  .badge{ font-size:10px; letter-spacing:1px; color: var(--lcd-on-dim); transition: all .2s; }
+  .badge.active{ color: var(--lcd-amber); text-shadow: 0 0 4px var(--lcd-amber); }
+
+  .status-row{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:10px; padding: 0 4px; font-size:11px; color: var(--text-dim); letter-spacing:1px;
+  }
+  .status-row .state{ color: var(--accent); font-weight:700; }
+  .gps-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; background:#333; margin-right:5px; }
+  .gps-dot.live{ background:#3ecf3e; box-shadow:0 0 6px #3ecf3e; animation: pulse 1.5s infinite; }
+  @keyframes pulse{ 50%{ opacity:.4 } }
+
+  .keys{
+    display:grid; grid-template-columns: repeat(5, 1fr); gap:8px;
+    margin-top: 14px;
+  }
+  @media (max-width: 480px) and (orientation: portrait){
+    .keys{ grid-template-columns: repeat(3, 1fr); }
+  }
+  .key{
+    background: linear-gradient(180deg, var(--key), #0a0a0a);
+    border: 1px solid var(--key-edge);
+    border-radius: 8px;
+    color: #ccc;
+    padding: 10px 4px 8px;
+    font-family: inherit;
+    cursor: pointer;
+    text-align:center;
+    box-shadow: 0 3px 0 #000, inset 0 1px 0 rgba(255,255,255,.05);
+    transition: transform .05s, box-shadow .05s;
+  }
+  .key:active{ transform: translateY(2px); box-shadow: 0 1px 0 #000; }
+  .key .kf{ font-size:9px; color:var(--text-dim); letter-spacing:1px; }
+  .key .kl{ font-size:12px; font-weight:700; margin-top:3px; }
+  .key.primary{ border-color: var(--accent); color: var(--accent); }
+  .key.danger{ color:#ff5a4a; }
+  .key.disabled{ opacity:.35; pointer-events:none; }
+
+  /* settings panel */
+  .overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:50;
+    display:none; align-items:center; justify-content:center; padding:16px;
+  }
+  .overlay.open{ display:flex; }
+  .panel{
+    background:#111; border:1px solid #2a2a2a; border-radius:14px;
+    width:100%; max-width:520px; max-height:90vh; overflow-y:auto;
+    padding:18px;
+  }
+  .panel h2{ font-size:14px; letter-spacing:2px; color:#eee; margin:0 0 14px; display:flex; justify-content:space-between; align-items:center; }
+  .panel h2 button{ background:none; border:none; color:#888; font-size:18px; cursor:pointer; }
+  .field{ margin-bottom:16px; }
+  .field-label{ font-size:11px; color:#999; letter-spacing:1px; margin-bottom:7px; display:block; }
+  .seg-control{ display:flex; gap:6px; flex-wrap:wrap; }
+  .seg-btn{
+    flex:1; min-width:80px; background:#1a1a1a; border:1px solid #333; color:#aaa;
+    padding:9px 10px; border-radius:7px; font-size:12px; cursor:pointer; letter-spacing:.5px;
+  }
+  .seg-btn.on{ background: var(--accent-dim); border-color: var(--accent); color: var(--accent); font-weight:700; }
+  .slider-row{ display:flex; align-items:center; gap:10px; }
+  .slider-row input[type=range]{ flex:1; accent-color: var(--accent); }
+  .slider-val{ font-size:13px; color: var(--accent); min-width:54px; text-align:right; font-weight:700; }
+  .rate-box{
+    background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:10px 12px;
+    font-size:11.5px; color:#888; line-height:1.8;
+  }
+  .rate-box b{ color:#ccc; }
+  .fullscreen-btn{
+    width:100%; background:#1a1a1a; border:1px solid #333; color:#ccc;
+    padding:10px; border-radius:8px; font-size:12px; cursor:pointer; letter-spacing:1px;
+  }
+
+  /* passenger rows */
+  .pax-row{
+    background:#0a0a0a; border:1px solid #222; border-radius:8px;
+    padding:10px 12px; margin-bottom:10px;
+  }
+  .pax-row-top{ display:flex; gap:8px; margin-bottom:8px; }
+  .pax-name{
+    flex:1; background:#161616; border:1px solid #2a2a2a; color:#ddd;
+    padding:7px 9px; border-radius:6px; font-size:13px; font-family:inherit;
+  }
+  .pax-remove{
+    background:none; border:1px solid #333; color:#888; border-radius:6px;
+    width:30px; cursor:pointer; font-size:13px;
+  }
+  .pax-row-mid{ display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+  .pax-action-btn{
+    background: var(--accent-dim); border:1px solid var(--accent); color: var(--accent);
+    padding:6px 12px; border-radius:6px; font-size:11px; cursor:pointer; font-weight:700; letter-spacing:1px;
+  }
+  .pax-action-btn.done{ opacity:.4; pointer-events:none; }
+  .pax-time{ font-size:11px; color:#999; min-width:64px; }
+  .pax-row-bottom{ display:flex; align-items:center; gap:8px; }
+  .pax-discount-type{
+    background:#161616; border:1px solid #2a2a2a; color:#ccc; font-size:11px;
+    padding:6px 8px; border-radius:6px; font-family:inherit;
+  }
+  .pax-discount-val{
+    background:#161616; border:1px solid #2a2a2a; color:#ccc; font-size:12px;
+    padding:6px 8px; border-radius:6px; width:80px; font-family:inherit;
+  }
+  .pax-row-result{
+    margin-top:8px; padding-top:8px; border-top:1px solid #1c1c1c;
+    font-size:12px; color: var(--accent); font-weight:700; text-align:right;
+  }
+  .pax-row-result .sub-note{ display:block; font-size:10px; color:#777; font-weight:400; margin-top:2px; }
+
+  /* trip history */
+  .history-row{
+    background:#0a0a0a; border:1px solid #222; border-radius:8px;
+    padding:10px 12px; margin-bottom:10px;
+  }
+  .history-row-top{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .history-region{
+    font-size:10px; font-weight:800; letter-spacing:1px; padding:2px 8px; border-radius:10px;
+    background: var(--accent-dim); color: var(--accent);
+  }
+  .history-date{ font-size:11px; color:#888; flex:1; }
+  .history-row-grid{
+    display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; font-size:11px; color:#999;
+  }
+  .history-row-grid > div{ display:flex; flex-direction:column; gap:2px; }
+  .history-label{ font-size:9px; color:#666; letter-spacing:1px; }
+  .history-total{ color: var(--accent); font-weight:700; font-size:13px; }
+
+  /* receipt */
+  .receipt-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:60;
+    display:none; align-items:center; justify-content:center; padding:16px;
+  }
+  .receipt-overlay.open{ display:flex; }
+  .receipt-shell{ width:100%; max-width:340px; }
+  .receipt{
+    background:#f4f1ea; color:#222; width:100%; border-radius:4px;
+    padding:22px 20px; font-family:'Courier New',monospace;
+    box-shadow: 0 20px 50px rgba(0,0,0,.5);
+  }
+  .receipt h3{ text-align:center; font-size:15px; letter-spacing:2px; margin:0 0 4px; }
+  .receipt .sub{ text-align:center; font-size:10px; color:#777; margin-bottom:14px; letter-spacing:1px; }
+  .receipt hr{ border:none; border-top:1px dashed #999; margin:10px 0; }
+  .r-row{ display:flex; justify-content:space-between; font-size:12px; padding:3px 0; }
+  .r-row.total{ font-size:16px; font-weight:700; border-top:1px solid #333; margin-top:8px; padding-top:8px; }
+  .receipt-actions{
+    display:flex; gap:8px; margin-top:14px;
+  }
+  .receipt-action-btn{
+    flex:1; background: var(--accent); color:#000; border:none;
+    padding:13px 10px; border-radius:8px; font-size:13px; font-weight:700; letter-spacing:.5px; cursor:pointer;
+    display:flex; flex-direction:row; align-items:center; justify-content:center; gap:8px; font-family:inherit;
+  }
+  .receipt-action-btn .icon{ font-size:17px; }
+  .receipt-action-btn:disabled{ opacity:.4; pointer-events:none; }
+  .receipt-close{
+    width:100%; margin-top:8px; background:#2a2a2a; color:#fff; border:none;
+    padding:10px; border-radius:8px; font-size:12px; letter-spacing:1px; cursor:pointer;
+  }
+  .receipt-status{
+    text-align:center; font-size:10px; color:#999; margin-top:8px; min-height:14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="rotate-notice" id="iframeNotice">
+  <div class="icon">🔒</div>
+  <div>
+    目前是在 Claude 預覽環境（iframe）中開啟<br>
+    <span style="font-size:12px;opacity:.7">GPS 定位需要瀏覽器授權，預覽環境通常無法跳出授權視窗。<br>請按右上角下載／分享，用手機或電腦的<b style="color:#ccc">瀏覽器直接開啟</b>這個檔案後再使用 GPS 模式。</span>
+  </div>
+  <button id="dismissIframeNotice" style="margin-top:6px; background:#1a1a1a; border:1px solid #333; color:#ccc; padding:8px 18px; border-radius:8px; font-size:12px; cursor:pointer;">我知道了，繼續使用模擬模式</button>
+</div>
+
+<div class="meter-wrap" id="meterWrap">
+  <div class="device" data-region="TW" id="device">
+
+    <div class="topbar">
+      <div class="brand">🚕 <b>計程車跳表</b> METER</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="region-pill" id="regionPill">台灣</span>
+        <button class="gear-btn" id="openSettings">⚙</button>
+      </div>
+    </div>
+
+    <div class="lcd">
+      <div class="lcd-cell lcd-main">
+        <div class="lcd-label" id="fareLabel">車資 FARE</div>
+        <div class="seg" id="fareDisplay">
+          <span class="ghost">88888</span><span id="fareNum">0</span><span class="unit" id="currencyUnit">元</span>
+        </div>
+      </div>
+
+      <div class="lcd-cell lcd-sub">
+        <div class="lcd-label">里程 DIST</div>
+        <div class="seg"><span class="ghost">88.888</span><span id="distNum">0.000</span><span class="unit">km</span></div>
+      </div>
+
+      <div class="lcd-cell lcd-sub">
+        <div class="lcd-label">計時 TIME</div>
+        <div class="seg"><span class="ghost">88:88:88</span><span id="timeNum">00:00:00</span></div>
+      </div>
+
+      <div class="badges">
+        <span class="badge" id="badgeNight">夜間 NIGHT</span>
+        <span class="badge" id="badgeWait">候車 WAIT</span>
+        <span class="badge" id="badgeToll">通行費 TOLL <span id="tollAmt">0</span></span>
+        <span class="badge" id="badgeGPS">GPS</span>
+      </div>
+    </div>
+
+    <div class="status-row">
+      <div><span class="gps-dot" id="gpsDot"></span><span id="modeText">模擬模式</span></div>
+      <div class="state" id="stateText">空車 VACANT</div>
+    </div>
+
+    <div class="keys">
+      <button class="key" id="keyF1"><div class="kf">F1</div><div class="kl">空車</div></button>
+      <button class="key primary" id="keyF2"><div class="kf">F2</div><div class="kl">開始</div></button>
+      <button class="key danger" id="keyF3"><div class="kf">F3</div><div class="kl">停止</div></button>
+      <button class="key" id="keyF4"><div class="kf">F4</div><div class="kl">高速公路</div></button>
+      <button class="key" id="keyF5"><div class="kf">F5</div><div class="kl">列印</div></button>
+    </div>
+
+    <div class="keys" style="grid-template-columns: 1fr 1fr;">
+      <button class="key" id="keyPax" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:11px 4px;">
+        <span style="font-size:14px;">👥</span><span class="kl" style="margin-top:0;">乘客分攤</span>
+        <span id="paxCountPill" style="display:none; background:var(--accent); color:#000; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px; margin-left:4px;">0</span>
+      </button>
+      <button class="key" id="keyHistory" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:11px 4px;">
+        <span style="font-size:14px;">📋</span><span class="kl" style="margin-top:0;">行程記錄</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- settings -->
+<div class="overlay" id="settingsOverlay">
+  <div class="panel">
+    <h2>設定 <button id="closeSettings">✕</button></h2>
+
+    <div class="field">
+      <span class="field-label">計費地區 REGION</span>
+      <div class="seg-control">
+        <button class="seg-btn" data-region-btn="TW">🇹🇼 台灣</button>
+        <button class="seg-btn" data-region-btn="AU">🇦🇺 澳洲 QLD</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="field-label">計費模式 MODE</span>
+      <div class="seg-control">
+        <button class="seg-btn" data-mode-btn="SIM">🎮 模擬</button>
+        <button class="seg-btn" data-mode-btn="GPS">📍 GPS</button>
+      </div>
+    </div>
+
+    <div class="field" id="simSpeedField">
+      <span class="field-label">模擬車速 SIM SPEED</span>
+      <div class="slider-row">
+        <input type="range" id="simSpeed" min="0" max="100" value="40">
+        <span class="slider-val" id="simSpeedVal">40 km/h</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="field-label">夜間加成 NIGHT SURCHARGE</span>
+      <div class="seg-control">
+        <button class="seg-btn" data-night-btn="auto">自動</button>
+        <button class="seg-btn" data-night-btn="on">開</button>
+        <button class="seg-btn" data-night-btn="off">關</button>
+      </div>
+    </div>
+
+    <div class="field" id="qldAreaField" style="display:none;">
+      <span class="field-label">QLD 計費分區 AREA</span>
+      <div class="seg-control">
+        <button class="seg-btn" data-qld-area="SEQ">南東昆士蘭<br><span style="font-size:9px;opacity:.7">$2.69/km</span></button>
+        <button class="seg-btn" data-qld-area="REG">地區型<br><span style="font-size:9px;opacity:.7">$2.80/km</span></button>
+        <button class="seg-btn" data-qld-area="RUR">偏遠地區<br><span style="font-size:9px;opacity:.7">$4.60/km</span></button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="field-label">目前費率 CURRENT RATES</span>
+      <div class="rate-box" id="rateBox"></div>
+    </div>
+
+    <div class="field">
+      <span class="field-label">螢幕恆亮</span>
+      <div class="seg-control">
+        <button class="seg-btn" data-wake-btn="off">關</button>
+        <button class="seg-btn" data-wake-btn="on">開</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <button class="fullscreen-btn" id="fullscreenBtn">⛶ 進入全螢幕滿版</button>
+    </div>
+
+    <div style="font-size:10px; color:#666; line-height:1.7;">
+      台灣費率：起跳 $85（含前 1.25km）· 之後每 200m +$5 · 時速低於 5km/h 每分鐘 +$5 · 夜間 +$20 · 高速公路每按 F4 +$40<br><br>
+      澳洲 QLD 費率（2025/7/1 起官方公告）：起跳費平日日間 $3.70 / 其餘時段 $6.00 · 每公里依分區 $2.69～$4.60 · 候車每分鐘 $1.01 · 預約費 $1.80<br><br>
+      iPhone 全螢幕：Safari「分享 → 加入主畫面」，再從主畫面圖示開啟即無網址列。
+    </div>
+  </div>
+</div>
+
+<!-- receipt -->
+<div class="receipt-overlay" id="receiptOverlay">
+  <div class="receipt-shell">
+    <div class="receipt" id="receiptContent"></div>
+    <div class="receipt-actions">
+      <button class="receipt-action-btn" id="shareReceiptBtn"><span class="icon">📤</span><span class="label">分享 / 儲存圖片</span></button>
+    </div>
+    <div class="receipt-status" id="receiptStatus"></div>
+    <button class="receipt-close" id="closeReceipt">關閉</button>
+  </div>
+</div>
+
+<!-- passengers / split fare -->
+<div class="overlay" id="paxOverlay">
+  <div class="panel">
+    <h2>乘客分攤 / 友情價 <button id="closePax">✕</button></h2>
+
+    <div style="font-size:11px; color:#888; line-height:1.7; margin-bottom:14px; background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:10px 12px;">
+      新增乘客後按「上車」開始計入該乘客的搭乘時間，下車時按「下車」。<br>
+      若所有乘客上下車時間都相同 → 平均分攤車資；否則 → 依各自實際搭乘時間佔比分攤。<br>
+      「友情價」可對個別乘客打折，折扣由司機自行吸收，不會轉嫁給其他乘客。
+    </div>
+
+    <div id="paxList"></div>
+
+    <button class="fullscreen-btn" id="addPaxBtn" style="margin-top:4px;">＋ 新增乘客</button>
+
+    <div class="field" style="margin-top:18px;">
+      <span class="field-label">分攤結果 SPLIT RESULT</span>
+      <div class="rate-box" id="splitResultBox">尚未新增乘客</div>
+    </div>
+  </div>
+</div>
+
+<template id="paxRowTemplate">
+  <div class="pax-row" data-pax-row>
+    <div class="pax-row-top">
+      <input type="text" class="pax-name" placeholder="乘客名稱" data-pax-name>
+      <button class="pax-remove" data-pax-remove title="移除">✕</button>
+    </div>
+    <div class="pax-row-mid">
+      <button class="pax-action-btn" data-pax-board>上車</button>
+      <span class="pax-time" data-pax-board-time>—</span>
+      <button class="pax-action-btn" data-pax-alight>下車</button>
+      <span class="pax-time" data-pax-alight-time>—</span>
+    </div>
+    <div class="pax-row-bottom">
+      <span class="field-label" style="margin:0;">友情價折扣</span>
+      <select class="pax-discount-type" data-pax-discount-type>
+        <option value="none">無折扣</option>
+        <option value="percent">折扣 %</option>
+        <option value="amount">折抵金額</option>
+      </select>
+      <input type="number" class="pax-discount-val" data-pax-discount-val placeholder="0" min="0" style="display:none;">
+    </div>
+    <div class="pax-row-result" data-pax-result></div>
+  </div>
+</template>
+
+<!-- trip history -->
+<div class="overlay" id="historyOverlay">
+  <div class="panel">
+    <h2>行程記錄 <button id="closeHistory">✕</button></h2>
+
+    <div style="font-size:11px; color:#888; line-height:1.6; margin-bottom:14px;">
+      每次按 F3 停止行程時會自動記錄一筆。資料保存在這個瀏覽器本機（離開或清除瀏覽器資料會消失）。
+    </div>
+
+    <div id="historyList"></div>
+    <div id="historyEmpty" style="font-size:12px; color:#666; text-align:center; padding:20px 0;">尚無行程記錄</div>
+
+    <button class="fullscreen-btn" id="clearHistoryBtn" style="margin-top:10px; border-color:#5a2a2a; color:#ff8a7a;">清空所有記錄</button>
+  </div>
+</div>
+
+<template id="historyRowTemplate">
+  <div class="history-row" data-history-row>
+    <div class="history-row-top">
+      <span class="history-region" data-history-region></span>
+      <span class="history-date" data-history-date></span>
+      <button class="pax-remove" data-history-remove title="刪除">✕</button>
+    </div>
+    <div class="history-row-grid">
+      <div><span class="history-label">里程</span><span data-history-dist></span></div>
+      <div><span class="history-label">時間</span><span data-history-time></span></div>
+      <div><span class="history-label">乘客</span><span data-history-pax></span></div>
+      <div><span class="history-label">合計</span><span class="history-total" data-history-total></span></div>
+    </div>
+  </div>
+</template>
+
+
+
+<script>
+(function(){
+  // ---------------- State ----------------
+  const state = {
+    region: 'TW',          // TW | AU
+    mode: 'SIM',            // SIM | GPS
+    simSpeed: 40,
+    nightMode: 'auto',      // auto | on | off
+    qldArea: 'SEQ',
+    wakeLock: false,
+    running: false,         // F2 active (meter running)
+    onHighway: false,
+    fare: 0,
+    distanceKm: 0,
+    elapsedMs: 0,
+    waitSeconds: 0,
+    tollTotal: 0,
+    nightActive: false,
+    tripStartTime: null,
+    lastTick: null,
+    gpsWatchId: null,
+    lastGPSPos: null,
+    speedKmh: 0,
+    // TW accumulators
+    tw_distSinceLastBump: 0, // meters beyond included 1.25km
+    tw_includedUsed: false,
+    tw_lowSpeedSeconds: 0,
+    // AU accumulators
+    au_waitMs: 0,
+  };
+
+  // Passengers for split-fare / friend pricing
+  // each: { id, name, boardMs(elapsed ms at boarding) | null, alightMs | null, discountType: 'none'|'percent'|'amount', discountVal: number }
+  let passengers = [];
+  let paxIdCounter = 0;
+
+  // ---------------- Persistence (localStorage) ----------------
+  const LS_SETTINGS_KEY = 'taximeter.settings.v1';
+  const LS_HISTORY_KEY = 'taximeter.history.v1';
+  let tripHistory = [];
+
+  function saveSettings(){
+    try{
+      const settings = {
+        region: state.region,
+        mode: state.mode,
+        simSpeed: state.simSpeed,
+        nightMode: state.nightMode,
+        qldArea: state.qldArea,
+        wakeLock: state.wakeLock,
+      };
+      localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings));
+    }catch(e){ console.warn('無法儲存設定', e); }
+  }
+
+  function loadSettings(){
+    try{
+      const raw = localStorage.getItem(LS_SETTINGS_KEY);
+      if(!raw) return null;
+      return JSON.parse(raw);
+    }catch(e){ console.warn('無法讀取設定', e); return null; }
+  }
+
+  function loadHistory(){
+    try{
+      const raw = localStorage.getItem(LS_HISTORY_KEY);
+      tripHistory = raw ? JSON.parse(raw) : [];
+    }catch(e){ console.warn('無法讀取行程記錄', e); tripHistory = []; }
+  }
+
+  function saveHistory(){
+    try{
+      localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(tripHistory));
+    }catch(e){ console.warn('無法儲存行程記錄', e); }
+  }
+
+  function recordTrip(){
+    // Only record trips that actually accrued a fare (avoid empty F2->F3 taps)
+    const grandTotal = state.fare + state.tollTotal;
+    if(grandTotal <= 0 && state.distanceKm <= 0 && state.elapsedMs < 1000) return;
+
+    const entry = {
+      id: Date.now() + '-' + Math.random().toString(36).slice(2,7),
+      timestamp: Date.now(),
+      region: state.region,
+      mode: state.mode,
+      distanceKm: state.distanceKm,
+      elapsedMs: state.elapsedMs,
+      fare: state.fare,
+      tollTotal: state.tollTotal,
+      grandTotal: grandTotal,
+      nightActive: state.nightActive,
+      passengers: passengers.length > 0 ? passengers.map(p => ({
+        name: p.name,
+        discountType: p.discountType,
+        discountVal: p.discountVal,
+      })) : [],
+      currency: state.region === 'TW' ? '元' : 'AUD',
+    };
+    // If passengers exist, also snapshot the split result for the record
+    if(passengers.length > 0){
+      const split = computeSplit();
+      if(split){
+        entry.splitResults = split.results.map(r => ({
+          name: r.passenger.name,
+          finalAmt: r.finalAmt,
+        }));
+      }
+    }
+    tripHistory.unshift(entry);
+    saveHistory();
+  }
+
+  let wakeLockSentinel = null;
+  let tickTimer = null;
+  let gpsSilentFailTimer = null;
+
+  // ---------------- Rate tables ----------------
+  const RATES = {
+    TW: {
+      flagfall: 85,
+      includedKm: 1.25,
+      bumpMeters: 200,
+      bumpAmount: 5,
+      lowSpeedThresholdKmh: 5,
+      lowSpeedPerMinute: 5,
+      nightSurcharge: 20,
+      highwayPerPress: 40,
+      currency: '元',
+      currencySymbol: '$',
+    },
+    AU: {
+      // QLD official rates as of 1 July 2025
+      flagfallDay: 3.70,
+      flagfallNight: 6.00,
+      perKm: { SEQ: 2.69, REG: 2.80, RUR: 4.60 },
+      waitPerMinute: 1.01,
+      bookingFee: 1.80,
+      currency: 'AUD',
+      currencySymbol: '$',
+    }
+  };
+
+  function isNightTime(date){
+    const h = date.getHours();
+    // TW convention: night ~23:00-06:00; AU QLD: flagfall outside 7am-7pm weekdays is "all other times"
+    if(state.region === 'TW'){
+      return (h >= 23 || h < 6);
+    } else {
+      const day = date.getDay(); // 0 sun .. 6 sat
+      const isWeekday = day >= 1 && day <= 5;
+      const inDayWindow = isWeekday && h >= 7 && h < 19;
+      return !inDayWindow;
+    }
+  }
+
+  function resolveNightActive(){
+    if(state.nightMode === 'on') return true;
+    if(state.nightMode === 'off') return false;
+    return isNightTime(new Date());
+  }
+
+  // ---------------- DOM refs ----------------
+  const $ = id => document.getElementById(id);
+  const deviceEl = $('device');
+  const fareNum = $('fareNum');
+  const distNum = $('distNum');
+  const timeNum = $('timeNum');
+  const tollAmt = $('tollAmt');
+  const badgeNight = $('badgeNight');
+  const badgeWait = $('badgeWait');
+  const badgeToll = $('badgeToll');
+  const badgeGPS = $('badgeGPS');
+  const modeText = $('modeText');
+  const stateText = $('stateText');
+  const gpsDot = $('gpsDot');
+  const regionPill = $('regionPill');
+  const currencyUnit = $('currencyUnit');
+  const fareLabel = $('fareLabel');
+  const rateBox = $('rateBox');
+
+  const keyF1 = $('keyF1'), keyF2 = $('keyF2'), keyF3 = $('keyF3'), keyF4 = $('keyF4'), keyF5 = $('keyF5');
+  const keyPax = $('keyPax');
+  const keyHistory = $('keyHistory');
+  const paxCountPill = $('paxCountPill');
+
+  // ---------------- Helpers ----------------
+  function fmtTime(ms){
+    const totalSec = Math.floor(ms/1000);
+    const h = String(Math.floor(totalSec/3600)).padStart(2,'0');
+    const m = String(Math.floor((totalSec%3600)/60)).padStart(2,'0');
+    const s = String(totalSec%60).padStart(2,'0');
+    return `${h}:${m}:${s}`;
+  }
+
+  function updateRateBox(){
+    if(state.region === 'TW'){
+      const r = RATES.TW;
+      rateBox.innerHTML = `起跳 <b>$${r.flagfall}</b>（含前 ${r.includedKm}km）<br>
+        之後每 ${r.bumpMeters}m <b>+$${r.bumpAmount}</b><br>
+        低速 (&lt;${r.lowSpeedThresholdKmh}km/h) 每分鐘 <b>+$${r.lowSpeedPerMinute}</b><br>
+        夜間加成 <b>+$${r.nightSurcharge}</b> · 高速公路每按 <b>+$${r.highwayPerPress}</b>`;
+    } else {
+      const r = RATES.AU;
+      rateBox.innerHTML = `起跳費 日間<b>$${r.flagfallDay.toFixed(2)}</b> / 其他<b>$${r.flagfallNight.toFixed(2)}</b><br>
+        每公里 (${qldAreaLabel(state.qldArea)}) <b>$${r.perKm[state.qldArea].toFixed(2)}</b><br>
+        候車每分鐘 <b>$${r.waitPerMinute.toFixed(2)}</b> · 預約費 <b>$${r.bookingFee.toFixed(2)}</b>`;
+    }
+  }
+  function qldAreaLabel(a){
+    return a === 'SEQ' ? '南東昆士蘭' : a === 'REG' ? '地區型' : '偏遠地區';
+  }
+
+  function applyRegionTheme(){
+    deviceEl.setAttribute('data-region', state.region);
+    regionPill.textContent = state.region === 'TW' ? '台灣' : 'QLD 澳洲';
+    currencyUnit.textContent = state.region === 'TW' ? '元' : 'AUD';
+    fareLabel.textContent = state.region === 'TW' ? '車資 FARE' : 'FARE 車資';
+    updateRateBox();
+  }
+
+  function render(){
+    fareNum.textContent = state.region === 'TW'
+      ? Math.round(state.fare).toLocaleString()
+      : state.fare.toFixed(2);
+    distNum.textContent = state.distanceKm.toFixed(3);
+    timeNum.textContent = fmtTime(state.elapsedMs);
+    tollAmt.textContent = state.tollTotal.toLocaleString(undefined, {maximumFractionDigits:2});
+
+    badgeNight.classList.toggle('active', state.nightActive);
+    badgeWait.classList.toggle('active', state.speedKmh < (state.region==='TW'?5:3) && state.running);
+    badgeToll.classList.toggle('active', state.tollTotal > 0);
+    badgeGPS.classList.toggle('active', state.mode === 'GPS');
+
+    if(state.mode === 'SIM'){
+      modeText.textContent = '模擬模式';
+    } else if(state.gpsWatchId === null){
+      modeText.textContent = 'GPS 未啟用';
+    } else if(state.lastGPSPos === null){
+      modeText.textContent = 'GPS 定位中…';
+    } else {
+      modeText.textContent = 'GPS 已連線';
+    }
+    gpsDot.classList.toggle('live', state.mode === 'GPS' && state.gpsWatchId !== null && state.lastGPSPos !== null);
+
+    stateText.textContent = state.running ? (state.onHighway ? '行駛中・高速公路' : '行駛中 OCCUPIED') : '空車 VACANT';
+    stateText.style.color = state.running ? 'var(--accent)' : '#777';
+
+    keyF2.classList.toggle('disabled', state.running);
+    keyF3.classList.toggle('disabled', !state.running);
+    keyF4.classList.toggle('disabled', !state.running);
+
+    if(passengers.length > 0){
+      paxCountPill.style.display = 'inline-block';
+      paxCountPill.textContent = passengers.length;
+    } else {
+      paxCountPill.style.display = 'none';
+    }
+    if($('paxOverlay').classList.contains('open')){
+      updateSplitResults();
+    }
+  }
+
+  // ---------------- Meter logic ----------------
+  function resetTrip(){
+    state.fare = 0;
+    state.distanceKm = 0;
+    state.elapsedMs = 0;
+    state.waitSeconds = 0;
+    state.tollTotal = 0;
+    state.tw_distSinceLastBump = 0;
+    state.tw_includedUsed = false;
+    state.tw_lowSpeedSeconds = 0;
+    state.au_waitMs = 0;
+    state.onHighway = false;
+    passengers = [];
+    paxIdCounter = 0;
+    renderPaxPanel();
+  }
+
+  function startTrip(){
+    if(state.running) return;
+    resetTrip();
+    state.running = true;
+    state.nightActive = resolveNightActive();
+    state.tripStartTime = Date.now();
+    state.lastTick = state.tripStartTime;
+
+    if(state.region === 'TW'){
+      state.fare = RATES.TW.flagfall;
+    } else {
+      state.fare = state.nightActive ? RATES.AU.flagfallNight : RATES.AU.flagfallDay;
+    }
+
+    if(state.mode === 'GPS') startGPS();
+    if(!tickTimer) tickTimer = setInterval(tick, 200);
+    render();
+  }
+
+  function stopTrip(){
+    if(!state.running) return;
+    recordTrip();
+    state.running = false;
+    stopGPS();
+    render();
+  }
+
+  function vacant(){
+    stopTrip();
+    resetTrip();
+    render();
+  }
+
+  function pressHighway(){
+    if(!state.running) return;
+    state.onHighway = true;
+    state.tollTotal += (state.region==='TW' ? RATES.TW.highwayPerPress : 0);
+    if(state.region === 'AU'){
+      // AU model: tolls are pass-through, no fixed per-press amount officially;
+      // we treat F4 as "add toll" using a nominal AU toll increment for simulation.
+      state.tollTotal += 4.20;
+    }
+    render();
+  }
+
+  function tick(){
+    if(!state.running) return;
+    const now = Date.now();
+    const dtMs = now - state.lastTick;
+    state.lastTick = now;
+    state.elapsedMs += dtMs;
+    state.nightActive = resolveNightActive();
+
+    // distance increment
+    const speed = state.mode === 'SIM' ? state.simSpeed : state.speedKmh;
+    const dtHours = dtMs / 3600000;
+    const distDeltaKm = state.mode === 'SIM' ? speed * dtHours : 0; // GPS handled by geolocation watch directly
+
+    if(state.mode === 'SIM'){
+      state.distanceKm += distDeltaKm;
+    }
+
+    applyFareLogic(dtMs, speed);
+    render();
+  }
+
+  function applyFareLogic(dtMs, speedKmh){
+    if(state.region === 'TW'){
+      const r = RATES.TW;
+      const distDeltaM = (state.mode === 'SIM')
+        ? (speedKmh * (dtMs/3600000)) * 1000
+        : 0;
+
+      if(speedKmh >= r.lowSpeedThresholdKmh){
+        // distance-based billing
+        const totalDistM = state.distanceKm*1000;
+        if(totalDistM > r.includedKm*1000){
+          state.tw_distSinceLastBump += distDeltaM;
+          while(state.tw_distSinceLastBump >= r.bumpMeters){
+            state.fare += r.bumpAmount;
+            state.tw_distSinceLastBump -= r.bumpMeters;
+          }
+        }
+      } else {
+        // low speed / waiting billing by time
+        state.tw_lowSpeedSeconds += dtMs/1000;
+        while(state.tw_lowSpeedSeconds >= 60){
+          state.fare += r.lowSpeedPerMinute;
+          state.tw_lowSpeedSeconds -= 60;
+        }
+      }
+
+      if(state.nightActive && !state._tw_nightApplied){
+        state.fare += r.nightSurcharge;
+        state._tw_nightApplied = true;
+      }
+      if(!state.nightActive){ state._tw_nightApplied = false; }
+
+    } else {
+      const r = RATES.AU;
+      const perKm = r.perKm[state.qldArea];
+
+      if(state.mode === 'SIM'){
+        const distDeltaKm = speedKmh * (dtMs/3600000);
+        if(speedKmh >= 3){
+          state.fare += distDeltaKm * perKm;
+        } else {
+          state.au_waitMs += dtMs;
+          while(state.au_waitMs >= 60000){
+            state.fare += r.waitPerMinute;
+            state.au_waitMs -= 60000;
+          }
+        }
+      }
+    }
+  }
+
+  // ---------------- GPS ----------------
+  function startGPS(){
+    if(!navigator.geolocation){
+      alert('此裝置/瀏覽器不支援定位功能');
+      return;
+    }
+    // Stop any existing watch before starting a new one
+    if(state.gpsWatchId !== null){
+      navigator.geolocation.clearWatch(state.gpsWatchId);
+      state.gpsWatchId = null;
+    }
+    state.gpsWatchId = navigator.geolocation.watchPosition(onGPSUpdate, onGPSError, {
+      enableHighAccuracy: true, maximumAge: 1000, timeout: 8000
+    });
+    render();
+  }
+  function stopGPS(){
+    if(state.gpsWatchId !== null){
+      navigator.geolocation.clearWatch(state.gpsWatchId);
+      state.gpsWatchId = null;
+    }
+    state.lastGPSPos = null;
+    state.speedKmh = 0;
+    render();
+  }
+  function onGPSError(err){
+    console.warn('GPS error', err);
+    if(err.code === err.PERMISSION_DENIED){
+      alert('定位權限被拒絕，請至瀏覽器/系統設定中允許本網站使用定位功能後再試一次。');
+      state.mode = 'SIM';
+      setActiveBtns('[data-mode-btn]','data-mode-btn', state.mode);
+      $('simSpeedField').style.display = 'block';
+      stopGPS();
+    } else if(err.code === err.TIMEOUT){
+      // transient, keep watching silently
+    } else {
+      alert('無法取得定位資訊，請確認裝置定位服務已開啟。');
+    }
+  }
+  function haversineKm(lat1, lon1, lat2, lon2){
+    const R = 6371;
+    const dLat = (lat2-lat1) * Math.PI/180;
+    const dLon = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+  function onGPSUpdate(pos){
+    if(state.mode !== 'GPS') return;
+    const isFirstFix = state.lastGPSPos === null;
+    const { latitude, longitude, speed } = pos.coords;
+    const now = Date.now();
+
+    if(state.lastGPSPos){
+      const dKm = haversineKm(state.lastGPSPos.lat, state.lastGPSPos.lon, latitude, longitude);
+      const dtMs = now - state.lastGPSPos.t;
+      const kmh = speed != null && speed >= 0 ? speed*3.6 : (dtMs>0 ? dKm/(dtMs/3600000) : 0);
+      state.speedKmh = Math.min(kmh, 160);
+
+      if(state.running && dKm < 5){ // filter GPS jumps, only bill while trip running
+        state.distanceKm += dKm;
+        applyFareLogic(dtMs, state.speedKmh);
+      }
+    }
+    state.lastGPSPos = { lat: latitude, lon: longitude, t: now };
+    if(isFirstFix){
+      clearTimeout(gpsSilentFailTimer);
+      $('iframeNotice').classList.remove('show');
+    }
+    render();
+  }
+
+  // ---------------- Receipt ----------------
+  function showReceipt(){
+    const r = $('receiptContent');
+    setReceiptStatus('');
+    const curSym = state.region === 'TW' ? '$' : 'A$';
+    const baseFare = state.fare;
+    const grandTotal = state.fare + state.tollTotal;
+    const fmt = (n) => state.region === 'TW' ? Math.round(n).toLocaleString() : n.toFixed(2);
+
+    let splitHtml = '';
+    if(passengers.length > 0){
+      const split = computeSplit();
+      const modeLabel = split.allSameWindow ? '平均分攤' : '依搭乘時間比例分攤';
+      splitHtml += `<hr><div class="r-row" style="font-weight:700;"><span>乘客分攤（${modeLabel}）</span><span></span></div>`;
+      split.results.forEach(res => {
+        const label = res.discountAmt > 0 ? `${res.passenger.name}（友情價）` : res.passenger.name;
+        splitHtml += `<div class="r-row"><span>${label}</span><span>${curSym}${fmt(res.finalAmt)}</span></div>`;
+      });
+      if(split.totalDiscount > 0){
+        splitHtml += `<div class="r-row" style="color:#999;"><span>友情價折扣（司機吸收）</span><span>－${curSym}${fmt(split.totalDiscount)}</span></div>`;
+      }
+    }
+
+    r.innerHTML = `
+      <h3>🚕 ${state.region === 'TW' ? '台灣計程車' : 'QLD TAXI RECEIPT'}</h3>
+      <div class="sub">${state.region === 'TW' ? '跳表收據' : 'Metered Fare Receipt'}</div>
+      <hr>
+      <div class="r-row"><span>${state.region==='TW'?'里程':'Distance'}</span><span>${state.distanceKm.toFixed(2)} km</span></div>
+      <div class="r-row"><span>${state.region==='TW'?'乘車時間':'Trip time'}</span><span>${fmtTime(state.elapsedMs)}</span></div>
+      <div class="r-row"><span>${state.region==='TW'?'夜間加成':'Night surcharge'}</span><span>${state.nightActive ? (state.region==='TW' ? '已套用' : 'Applied') : '—'}</span></div>
+      <div class="r-row"><span>${state.region==='TW'?'跳表車資':'Metered fare'}</span><span>${curSym}${fmt(baseFare)}</span></div>
+      ${state.tollTotal > 0 ? `<div class="r-row"><span>${state.region==='TW'?'通行費':'Tolls'}</span><span>${curSym}${fmt(state.tollTotal)}</span></div>` : ''}
+      <hr>
+      <div class="r-row total"><span>${state.region==='TW'?'合計':'TOTAL'}</span><span>${curSym}${fmt(grandTotal)}</span></div>
+      ${splitHtml}
+    `;
+    $('shareReceiptBtn').disabled = false;
+    // If file-sharing isn't available at all (e.g. desktop browser, or this
+    // sandboxed preview iframe without the web-share permission), relabel
+    // the button so it doesn't promise something it can't do.
+    const shareBtnLabel = $('shareReceiptBtn').querySelector('.label') || $('shareReceiptBtn');
+    if(!navigator.share){
+      shareBtnLabel.textContent = '儲存圖片（下載）';
+    } else {
+      shareBtnLabel.textContent = '分享 / 儲存圖片';
+    }
+    setReceiptStatus('');
+    $('receiptOverlay').classList.add('open');
+  }
+
+  // ---------------- Passengers / Split fare ----------------
+  function addPassenger(){
+    paxIdCounter += 1;
+    passengers.push({
+      id: paxIdCounter,
+      name: '乘客 ' + paxIdCounter,
+      boardMs: state.running ? state.elapsedMs : null,
+      alightMs: null,
+      discountType: 'none',
+      discountVal: 0,
+    });
+    renderPaxPanel();
+    render();
+  }
+
+  function removePassenger(id){
+    passengers = passengers.filter(p => p.id !== id);
+    renderPaxPanel();
+    render();
+  }
+
+  function boardPassenger(id){
+    const p = passengers.find(p => p.id === id);
+    if(!p) return;
+    p.boardMs = state.elapsedMs;
+    p.alightMs = null;
+    renderPaxPanel();
+  }
+
+  function alightPassenger(id){
+    const p = passengers.find(p => p.id === id);
+    if(!p) return;
+    if(p.boardMs === null) p.boardMs = 0;
+    p.alightMs = state.elapsedMs;
+    renderPaxPanel();
+  }
+
+  // Compute each passenger's "ride duration" in ms.
+  // If boarded but not yet alighted, use current elapsed time as a live endpoint.
+  function paxDurationMs(p){
+    const start = p.boardMs ?? 0;
+    const end = p.alightMs ?? state.elapsedMs;
+    return Math.max(0, end - start);
+  }
+
+  function computeSplit(){
+    if(passengers.length === 0) return null;
+    const grandTotal = state.fare + state.tollTotal;
+
+    const allSameWindow = passengers.every(p =>
+      (p.boardMs ?? 0) === (passengers[0].boardMs ?? 0) &&
+      (p.alightMs ?? state.elapsedMs) === (passengers[0].alightMs ?? state.elapsedMs)
+    );
+
+    let shares; // raw share (before discount) per passenger, same order as `passengers`
+    if(allSameWindow){
+      const equal = grandTotal / passengers.length;
+      shares = passengers.map(() => equal);
+    } else {
+      const durations = passengers.map(paxDurationMs);
+      const totalDuration = durations.reduce((a,b)=>a+b, 0);
+      if(totalDuration <= 0){
+        const equal = grandTotal / passengers.length;
+        shares = passengers.map(() => equal);
+      } else {
+        shares = durations.map(d => grandTotal * (d / totalDuration));
+      }
+    }
+
+    const results = passengers.map((p, i) => {
+      const rawShare = shares[i];
+      let discountAmt = 0;
+      if(p.discountType === 'percent'){
+        discountAmt = rawShare * (Math.min(Math.max(p.discountVal,0),100) / 100);
+      } else if(p.discountType === 'amount'){
+        discountAmt = Math.min(Math.max(p.discountVal,0), rawShare);
+      }
+      const finalAmt = rawShare - discountAmt;
+      return { passenger: p, rawShare, discountAmt, finalAmt };
+    });
+
+    const totalCollected = results.reduce((sum, r) => sum + r.finalAmt, 0);
+    const totalDiscount = results.reduce((sum, r) => sum + r.discountAmt, 0);
+
+    return { allSameWindow, grandTotal, results, totalCollected, totalDiscount };
+  }
+
+  function fmtMoney(n){
+    return state.region === 'TW' ? Math.round(n).toLocaleString() : n.toFixed(2);
+  }
+  function fmtMs(ms){
+    const totalSec = Math.floor(ms/1000);
+    const m = String(Math.floor(totalSec/60)).padStart(2,'0');
+    const s = String(totalSec%60).padStart(2,'0');
+    return `${m}:${s}`;
+  }
+
+  function renderPaxPanel(){
+    const list = $('paxList');
+    const tpl = $('paxRowTemplate');
+    list.innerHTML = '';
+    passengers.forEach(p => {
+      const node = tpl.content.cloneNode(true);
+      const row = node.querySelector('[data-pax-row]');
+      row.dataset.id = p.id;
+
+      const nameInput = node.querySelector('[data-pax-name]');
+      nameInput.value = p.name;
+      nameInput.addEventListener('input', (e) => { p.name = e.target.value || ('乘客 ' + p.id); updateSplitResults(); });
+
+      const boardBtn = node.querySelector('[data-pax-board]');
+      const alightBtn = node.querySelector('[data-pax-alight]');
+      const boardTime = node.querySelector('[data-pax-board-time]');
+      const alightTime = node.querySelector('[data-pax-alight-time]');
+
+      boardTime.textContent = p.boardMs !== null ? fmtMs(p.boardMs) : '—';
+      alightTime.textContent = p.alightMs !== null ? fmtMs(p.alightMs) : '—';
+      boardBtn.classList.toggle('done', p.boardMs !== null);
+      alightBtn.classList.toggle('done', p.alightMs !== null);
+      if(!state.running && p.boardMs === null){ boardBtn.disabled = true; boardBtn.style.opacity = .4; }
+
+      boardBtn.addEventListener('click', () => boardPassenger(p.id));
+      alightBtn.addEventListener('click', () => alightPassenger(p.id));
+
+      const discountType = node.querySelector('[data-pax-discount-type]');
+      const discountVal = node.querySelector('[data-pax-discount-val]');
+      discountType.value = p.discountType;
+      discountVal.value = p.discountVal || '';
+      discountVal.style.display = p.discountType === 'none' ? 'none' : 'block';
+      discountVal.placeholder = p.discountType === 'percent' ? '%' : (state.region==='TW'?'$':'A$');
+
+      discountType.addEventListener('change', (e) => {
+        p.discountType = e.target.value;
+        discountVal.style.display = p.discountType === 'none' ? 'none' : 'block';
+        discountVal.placeholder = p.discountType === 'percent' ? '%' : (state.region==='TW'?'$':'A$');
+        updateSplitResults();
+      });
+      discountVal.addEventListener('input', (e) => {
+        p.discountVal = Number(e.target.value) || 0;
+        updateSplitResults();
+      });
+
+      node.querySelector('[data-pax-remove]').addEventListener('click', () => removePassenger(p.id));
+
+      list.appendChild(node);
+    });
+    updateSplitResults();
+  }
+
+  function updateSplitResults(){
+    const box = $('splitResultBox');
+    if(passengers.length === 0){
+      box.innerHTML = '尚未新增乘客';
+      $('paxList').querySelectorAll('[data-pax-result]').forEach(el => el.textContent = '');
+      return;
+    }
+    const split = computeSplit();
+    const curSym = state.region === 'TW' ? '$' : 'A$';
+
+    // per-row result text
+    const rows = $('paxList').querySelectorAll('[data-pax-row]');
+    rows.forEach(row => {
+      const id = Number(row.dataset.id);
+      const r = split.results.find(r => r.passenger.id === id);
+      const resultEl = row.querySelector('[data-pax-result]');
+      if(!r) return;
+      let txt = `應付 ${curSym}${fmtMoney(r.finalAmt)}`;
+      let note = '';
+      if(r.discountAmt > 0){
+        note = `原始分攤 ${curSym}${fmtMoney(r.rawShare)} － 友情價折抵 ${curSym}${fmtMoney(r.discountAmt)}`;
+      }
+      resultEl.innerHTML = txt + (note ? `<span class="sub-note">${note}</span>` : '');
+    });
+
+    const modeLabel = split.allSameWindow ? '同時上下車・平均分攤' : '依各自搭乘時間比例分攤';
+    let html = `分攤方式：<b>${modeLabel}</b><br>車資+通行費總額：<b>${curSym}${fmtMoney(split.grandTotal)}</b><br>`;
+    html += `實收合計（含友情價折扣）：<b>${curSym}${fmtMoney(split.totalCollected)}</b>`;
+    if(split.totalDiscount > 0){
+      html += `<br>友情價折扣總額（司機吸收）：<b>${curSym}${fmtMoney(split.totalDiscount)}</b>`;
+    }
+    box.innerHTML = html;
+  }
+
+  $('addPaxBtn').addEventListener('click', addPassenger);
+  keyPax.addEventListener('click', () => { renderPaxPanel(); $('paxOverlay').classList.add('open'); });
+  $('closePax').addEventListener('click', () => $('paxOverlay').classList.remove('open'));
+  $('paxOverlay').addEventListener('click', (e) => { if(e.target.id === 'paxOverlay') $('paxOverlay').classList.remove('open'); });
+
+  // ---------------- Trip history panel ----------------
+  function fmtDate(ts){
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function renderHistoryPanel(){
+    const list = $('historyList');
+    const tpl = $('historyRowTemplate');
+    const emptyEl = $('historyEmpty');
+    list.innerHTML = '';
+
+    if(tripHistory.length === 0){
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    tripHistory.forEach(entry => {
+      const node = tpl.content.cloneNode(true);
+      const curSym = entry.region === 'TW' ? '$' : 'A$';
+      const fmt = (n) => entry.region === 'TW' ? Math.round(n).toLocaleString() : n.toFixed(2);
+
+      node.querySelector('[data-history-region]').textContent = entry.region === 'TW' ? '台灣' : 'QLD 澳洲';
+      node.querySelector('[data-history-date]').textContent = fmtDate(entry.timestamp);
+      node.querySelector('[data-history-dist]').textContent = entry.distanceKm.toFixed(2) + ' km';
+      node.querySelector('[data-history-time]').textContent = fmtTime(entry.elapsedMs);
+      node.querySelector('[data-history-pax]').textContent = entry.passengers.length > 0 ? (entry.passengers.length + ' 人') : '—';
+      node.querySelector('[data-history-total]').textContent = curSym + fmt(entry.grandTotal);
+      node.querySelector('[data-history-remove]').addEventListener('click', () => {
+        tripHistory = tripHistory.filter(t => t.id !== entry.id);
+        saveHistory();
+        renderHistoryPanel();
+      });
+
+      list.appendChild(node);
+    });
+  }
+
+  keyHistory.addEventListener('click', () => { renderHistoryPanel(); $('historyOverlay').classList.add('open'); });
+  $('closeHistory').addEventListener('click', () => $('historyOverlay').classList.remove('open'));
+  $('historyOverlay').addEventListener('click', (e) => { if(e.target.id === 'historyOverlay') $('historyOverlay').classList.remove('open'); });
+  $('clearHistoryBtn').addEventListener('click', () => {
+    if(tripHistory.length === 0) return;
+    if(confirm('確定要清空所有行程記錄嗎？此動作無法復原。')){
+      tripHistory = [];
+      saveHistory();
+      renderHistoryPanel();
+    }
+  });
+
+  // ---------------- Key handlers ----------------
+  keyF1.addEventListener('click', vacant);
+  keyF2.addEventListener('click', startTrip);
+  keyF3.addEventListener('click', stopTrip);
+  keyF4.addEventListener('click', pressHighway);
+  keyF5.addEventListener('click', showReceipt);
+  $('receiptOverlay').addEventListener('click', (e)=>{ if(e.target.id==='receiptOverlay') $('receiptOverlay').classList.remove('open'); });
+  $('closeReceipt').addEventListener('click', ()=> $('receiptOverlay').classList.remove('open'));
+  $('shareReceiptBtn').addEventListener('click', handleReceiptExport);
+
+  // ---------------- Receipt image export (share / save) ----------------
+  function setReceiptStatus(msg, isError){
+    const el = $('receiptStatus');
+    el.textContent = msg || '';
+    el.style.color = isError ? '#ff8a7a' : '#999';
+  }
+
+  // Render the current #receiptContent DOM into a PNG canvas, drawn natively
+  // (no external library / CDN dependency, so this works fully offline).
+  function renderReceiptToCanvas(){
+    const card = $('receiptContent');
+    const rows = Array.from(card.children);
+    const W = 720; // export width in CSS px, then upscaled by DPR for crispness
+    const PAD = 48;
+    const DPR = Math.min(3, Math.max(2, window.devicePixelRatio || 2));
+
+    const FONT = `'Courier New', monospace`;
+    const SIZE = { h3: 24, sub: 14, row: 15, total: 19 };
+    const LH   = { h3: 34, sub: 24, hr: 26, row: 28, total: 44 };
+
+    // Measuring context (1x scale) to compute wrapped line counts before
+    // we know the final canvas height.
+    const measure = document.createElement('canvas').getContext('2d');
+    const maxTextW = W - PAD*2;
+
+    function wrapText(ctx, text, maxWidth){
+      if(!text) return [''];
+      const words = text.split('');
+      // CJK-safe: wrap by character, not by space-separated word, since
+      // Chinese text has no spaces and long names/labels need to break.
+      let lines = [];
+      let line = '';
+      for(const ch of words){
+        const test = line + ch;
+        if(ctx.measureText(test).width > maxWidth && line !== ''){
+          lines.push(line);
+          line = ch;
+        } else {
+          line = test;
+        }
+      }
+      if(line) lines.push(line);
+      return lines;
+    }
+
+    // First pass: determine each row's rendered line(s) and total height
+    const layout = []; // { kind, height, ...drawData }
+    rows.forEach(node => {
+      const tag = node.tagName;
+      if(tag === 'H3'){
+        layout.push({ kind:'h3', height: LH.h3, text: node.textContent.trim() });
+      } else if(tag === 'HR'){
+        layout.push({ kind:'hr', height: LH.hr });
+      } else if(node.classList.contains('sub')){
+        layout.push({ kind:'sub', height: LH.sub, text: node.textContent.trim() });
+      } else if(node.classList.contains('r-row')){
+        const spans = node.querySelectorAll('span');
+        const left = spans[0] ? spans[0].textContent.trim() : '';
+        const right = spans[1] ? spans[1].textContent.trim() : '';
+        const isTotal = node.classList.contains('total');
+        const weight = isTotal || node.style.fontWeight === '700' ? 700 : 400;
+        const color = node.style.color || '#222';
+        const fontSize = isTotal ? SIZE.total : SIZE.row;
+
+        measure.font = `${weight} ${fontSize}px ${FONT}`;
+        // Reserve space on the right for the amount so the label wraps
+        // instead of overlapping it.
+        const rightW = measure.measureText(right).width;
+        const leftMaxW = Math.max(60, maxTextW - rightW - 16);
+        const leftLines = wrapText(measure, left, leftMaxW);
+        const lineH = isTotal ? LH.total : LH.row;
+        const height = Math.max(lineH, lineH * leftLines.length * 0.78 + (leftLines.length>1 ? 6 : 0));
+
+        layout.push({ kind: isTotal ? 'total' : 'row', height, leftLines, right, color, weight, fontSize, isTotal });
+      } else {
+        layout.push({ kind:'spacer', height: 8 });
+      }
+    });
+
+    const contentH = layout.reduce((s,l)=>s+l.height, 0);
+    const headerPad = 14;
+    const footerH = 36; // small footer note
+    const totalH = PAD*2 + headerPad + contentH + footerH;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W * DPR;
+    canvas.height = totalH * DPR;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(DPR, DPR);
+
+    // background
+    ctx.fillStyle = '#f4f1ea';
+    ctx.fillRect(0,0,W,totalH);
+    ctx.textBaseline = 'alphabetic';
+
+    let y = PAD + headerPad;
+    layout.forEach(l => {
+      const cx = W/2;
+      if(l.kind === 'h3'){
+        ctx.font = `700 ${SIZE.h3}px ${FONT}`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#222';
+        ctx.fillText(l.text, cx, y + SIZE.h3*0.8);
+      } else if(l.kind === 'sub'){
+        ctx.font = `400 ${SIZE.sub}px ${FONT}`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#777';
+        ctx.fillText(l.text, cx, y + SIZE.sub*0.9);
+      } else if(l.kind === 'hr'){
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([5,4]);
+        ctx.beginPath();
+        ctx.moveTo(PAD, y + l.height/2);
+        ctx.lineTo(W - PAD, y + l.height/2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if(l.kind === 'total'){
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(PAD, y);
+        ctx.lineTo(W - PAD, y);
+        ctx.stroke();
+        const baseY = y + l.height*0.62;
+        ctx.font = `700 ${SIZE.total}px ${FONT}`;
+        ctx.fillStyle = '#222';
+        ctx.textAlign = 'left';
+        ctx.fillText(l.leftLines[0] || '', PAD, baseY);
+        ctx.textAlign = 'right';
+        ctx.fillText(l.right, W - PAD, baseY);
+      } else if(l.kind === 'row'){
+        ctx.font = `${l.weight} ${l.fontSize}px ${FONT}`;
+        ctx.fillStyle = l.color;
+        ctx.textAlign = 'left';
+        const lineStep = l.height / Math.max(1, l.leftLines.length);
+        l.leftLines.forEach((txt, i) => {
+          ctx.fillText(txt, PAD, y + lineStep*(i+0.78));
+        });
+        ctx.textAlign = 'right';
+        ctx.fillText(l.right, W - PAD, y + lineStep*0.78);
+      }
+      y += l.height;
+    });
+
+    // footer note
+    ctx.font = `400 11px ${FONT}`;
+    ctx.fillStyle = '#999';
+    ctx.textAlign = 'center';
+    const footerText = state.region === 'TW' ? '本收據由計程車跳表 App 產生・僅供參考' : 'Generated by Taxi Meter App · For reference only';
+    ctx.fillText(footerText, W/2, totalH - PAD/2);
+
+    return canvas;
+  }
+
+  function canvasToBlob(canvas){
+    return new Promise(resolve => canvas.toBlob(blob => resolve(blob), 'image/png', 0.95));
+  }
+
+  async function handleReceiptExport(){
+    const shareBtn = $('shareReceiptBtn');
+    shareBtn.disabled = true;
+    setReceiptStatus('正在準備圖片…');
+    try{
+      const canvas = renderReceiptToCanvas();
+      const blob = await canvasToBlob(canvas);
+      if(!blob) throw new Error('canvas toBlob failed');
+
+      const region = state.region === 'TW' ? 'TW' : 'AU';
+      const filename = `taxi-receipt-${region}-${Date.now()}.png`;
+      const file = new File([blob], filename, { type: 'image/png' });
+
+      if(navigator.canShare && navigator.canShare({ files: [file] })){
+        // Native share sheet — the "Save Image" / "儲存到照片" option there
+        // covers saving to the photo library, so we don't need a separate
+        // download button.
+        await navigator.share({
+          files: [file],
+          title: state.region === 'TW' ? '計程車跳表收據' : 'Taxi Meter Receipt',
+        });
+        setReceiptStatus('已開啟分享選單');
+      } else {
+        // No file-sharing support (e.g. desktop browser, or a sandboxed
+        // preview iframe) — fall back to a direct download.
+        setReceiptStatus('此裝置不支援分享，已改為下載圖片', true);
+        downloadBlob(blob, filename);
+      }
+    }catch(err){
+      if(err && err.name === 'AbortError'){
+        // user cancelled the share sheet — not an error
+        setReceiptStatus('');
+      } else {
+        console.error('receipt export failed', err);
+        setReceiptStatus('產生圖片失敗，請再試一次', true);
+      }
+    } finally {
+      shareBtn.disabled = false;
+    }
+  }
+
+  function downloadBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  // ---------------- Settings panel ----------------
+  $('openSettings').addEventListener('click', ()=> $('settingsOverlay').classList.add('open'));
+  $('closeSettings').addEventListener('click', ()=> $('settingsOverlay').classList.remove('open'));
+  $('settingsOverlay').addEventListener('click', (e)=>{ if(e.target.id==='settingsOverlay') $('settingsOverlay').classList.remove('open'); });
+
+  function setActiveBtns(selector, attr, value){
+    document.querySelectorAll(selector).forEach(b=>{
+      b.classList.toggle('on', b.getAttribute(attr) === value);
+    });
+  }
+
+  document.querySelectorAll('[data-region-btn]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.region = btn.getAttribute('data-region-btn');
+      $('qldAreaField').style.display = state.region === 'AU' ? 'block' : 'none';
+      setActiveBtns('[data-region-btn]','data-region-btn', state.region);
+      applyRegionTheme();
+      vacant();
+      saveSettings();
+    });
+  });
+
+  document.querySelectorAll('[data-mode-btn]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const newMode = btn.getAttribute('data-mode-btn');
+      if(newMode === state.mode) return;
+
+      const wasRunning = state.running;
+      if(wasRunning) stopTrip();
+
+      state.mode = newMode;
+      setActiveBtns('[data-mode-btn]','data-mode-btn', state.mode);
+      $('simSpeedField').style.display = state.mode === 'SIM' ? 'block' : 'none';
+
+      if(state.mode === 'GPS'){
+        if(!navigator.geolocation){
+          alert('此裝置/瀏覽器不支援定位功能');
+          state.mode = 'SIM';
+          setActiveBtns('[data-mode-btn]','data-mode-btn', state.mode);
+          $('simSpeedField').style.display = 'block';
+        } else {
+          // Request permission / start watching immediately so the browser
+          // prompt appears right away, not only when F2 is pressed.
+          startGPS();
+          maybeShowIframeNotice();
+          // Some embedded/sandboxed webviews silently deny geolocation
+          // without ever firing onGPSError. If we still have no fix after
+          // a few seconds, assume we're blocked and surface the notice.
+          clearTimeout(gpsSilentFailTimer);
+          gpsSilentFailTimer = setTimeout(() => {
+            if(state.mode === 'GPS' && state.lastGPSPos === null){
+              maybeShowIframeNotice();
+            }
+          }, 4000);
+        }
+      } else {
+        stopGPS();
+        clearTimeout(gpsSilentFailTimer);
+      }
+      render();
+      saveSettings();
+    });
+  });
+
+  $('simSpeed').addEventListener('input', (e)=>{
+    state.simSpeed = Number(e.target.value);
+    $('simSpeedVal').textContent = state.simSpeed + ' km/h';
+  });
+  $('simSpeed').addEventListener('change', saveSettings);
+
+  document.querySelectorAll('[data-night-btn]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.nightMode = btn.getAttribute('data-night-btn');
+      setActiveBtns('[data-night-btn]','data-night-btn', state.nightMode);
+      saveSettings();
+    });
+  });
+
+  document.querySelectorAll('[data-qld-area]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.qldArea = btn.getAttribute('data-qld-area');
+      setActiveBtns('[data-qld-area]','data-qld-area', state.qldArea);
+      updateRateBox();
+      saveSettings();
+    });
+  });
+
+  document.querySelectorAll('[data-wake-btn]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const val = btn.getAttribute('data-wake-btn');
+      setActiveBtns('[data-wake-btn]','data-wake-btn', val);
+      state.wakeLock = val === 'on';
+      if(state.wakeLock){
+        try{
+          if('wakeLock' in navigator){
+            wakeLockSentinel = await navigator.wakeLock.request('screen');
+          }
+        }catch(e){ console.warn('wakelock failed', e); }
+      } else if(wakeLockSentinel){
+        wakeLockSentinel.release();
+        wakeLockSentinel = null;
+      }
+      saveSettings();
+    });
+  });
+
+  $('fullscreenBtn').addEventListener('click', ()=>{
+    const el = document.documentElement;
+    if(el.requestFullscreen) el.requestFullscreen();
+    else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  });
+
+  // ---------------- iframe / embedded-preview detection ----------------
+  const isEmbedded = (() => {
+    try { return window.self !== window.top; } catch(e) { return true; }
+  })();
+  function maybeShowIframeNotice(){
+    if(isEmbedded && state.mode === 'GPS'){
+      $('iframeNotice').classList.add('show');
+    }
+  }
+  $('dismissIframeNotice').addEventListener('click', () => {
+    $('iframeNotice').classList.remove('show');
+  });
+
+  // ---------------- Init ----------------
+  loadHistory();
+
+  const savedSettings = loadSettings();
+  if(savedSettings){
+    if(savedSettings.region === 'TW' || savedSettings.region === 'AU') state.region = savedSettings.region;
+    if(typeof savedSettings.simSpeed === 'number') state.simSpeed = savedSettings.simSpeed;
+    if(['auto','on','off'].includes(savedSettings.nightMode)) state.nightMode = savedSettings.nightMode;
+    if(['SEQ','REG','RUR'].includes(savedSettings.qldArea)) state.qldArea = savedSettings.qldArea;
+    state.wakeLock = !!savedSettings.wakeLock;
+    // GPS mode is intentionally NOT auto-restored: browsers require a fresh
+    // user gesture to (re)prompt for geolocation permission, and silently
+    // requesting it on page load would be a poor/confusing experience.
+    // We restore the SIM speed/settings but always start back in SIM mode.
+    state.mode = 'SIM';
+  }
+
+  setActiveBtns('[data-region-btn]','data-region-btn', state.region);
+  setActiveBtns('[data-mode-btn]','data-mode-btn', state.mode);
+  setActiveBtns('[data-night-btn]','data-night-btn', state.nightMode);
+  setActiveBtns('[data-qld-area]','data-qld-area', state.qldArea);
+  setActiveBtns('[data-wake-btn]','data-wake-btn', state.wakeLock ? 'on' : 'off');
+  $('qldAreaField').style.display = state.region === 'AU' ? 'block' : 'none';
+  $('simSpeedField').style.display = state.mode === 'SIM' ? 'block' : 'none';
+  $('simSpeed').value = state.simSpeed;
+  $('simSpeedVal').textContent = state.simSpeed + ' km/h';
+
+  applyRegionTheme();
+  render();
+
+  if(state.wakeLock && 'wakeLock' in navigator){
+    navigator.wakeLock.request('screen').then(s => wakeLockSentinel = s).catch(()=>{});
+  }
+
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible' && state.wakeLock && 'wakeLock' in navigator && !wakeLockSentinel){
+      navigator.wakeLock.request('screen').then(s=> wakeLockSentinel = s).catch(()=>{});
+    }
+  });
+})();
+</script>
+</body>
+</html>
