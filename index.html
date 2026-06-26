@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="NoBodyPay">
 <meta name="theme-color" content="#000000">
 <meta name="description" content="NoBodyPay 計程車跳表：台灣與澳洲QLD雙地區計程車跳表模擬器，支援GPS定位計費、多人分攤車資、友情價折扣、行程記錄">
-<meta property="og:title" content="NoBodyPay 計程車跳表 🚕 ">
+<meta property="og:title" content="NoBodyPay 計程車跳表 🚕 雙地區咪錶">
 <meta property="og:description" content="台灣與澳洲QLD雙地區計程車跳表模擬器，支援GPS定位計費、多人分攤車資、友情價折扣">
 <meta property="og:type" content="website">
 <meta property="og:image" content="icons/icon-512.png">
@@ -17,7 +17,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 <link rel="shortcut icon" href="favicon.ico">
-<title>NoBodyPay 計程車跳表 🚕 </title>
+<title>NoBodyPay 計程車跳表 🚕 雙地區咪錶</title>
 <style>
   @font-face {
     font-family: 'DSEG';
@@ -351,7 +351,7 @@
     <div class="topbar">
       <div class="brand">
         <span class="brand-main">🚕 NoBodyPay</span>
-        <span class="brand-sub">TAXI METER</span>
+        <span class="brand-sub">計程車跳表 METER</span>
       </div>
       <div style="display:flex; align-items:center; gap:8px;">
         <span class="region-pill" id="regionPill">台灣</span>
@@ -924,9 +924,10 @@
   function applyFareLogic(dtMs, speedKmh){
     if(state.region === 'TW'){
       const r = RATES.TW;
-      const distDeltaM = (state.mode === 'SIM')
-        ? (speedKmh * (dtMs/3600000)) * 1000
-        : 0;
+      // Distance delta in metres: same formula for both SIM and GPS.
+      // In GPS mode, speedKmh is already set from the GPS fix in onGPSUpdate,
+      // so this gives the correct distance increment either way.
+      const distDeltaM = (speedKmh * (dtMs / 3600000)) * 1000;
 
       if(speedKmh >= r.lowSpeedThresholdKmh){
         // distance-based billing
@@ -957,16 +958,18 @@
       const r = RATES.AU;
       const perKm = r.perKm[state.qldArea];
 
-      if(state.mode === 'SIM'){
-        const distDeltaKm = speedKmh * (dtMs/3600000);
-        if(speedKmh >= 3){
-          state.fare += distDeltaKm * perKm;
-        } else {
-          state.au_waitMs += dtMs;
-          while(state.au_waitMs >= 60000){
-            state.fare += r.waitPerMinute;
-            state.au_waitMs -= 60000;
-          }
+      // Distance delta: in SIM mode we derive it from speed×time;
+      // in GPS mode onGPSUpdate already added the delta to state.distanceKm,
+      // so we back-calculate it from speedKmh×dtMs (same formula, same result).
+      const distDeltaKm = speedKmh * (dtMs / 3600000);
+
+      if(speedKmh >= 3){
+        state.fare += distDeltaKm * perKm;
+      } else {
+        state.au_waitMs += dtMs;
+        while(state.au_waitMs >= 60000){
+          state.fare += r.waitPerMinute;
+          state.au_waitMs -= 60000;
         }
       }
     }
