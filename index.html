@@ -79,6 +79,16 @@
   /* Landscape gets a wider cap, matching the original dashboard feel */
   @media (orientation: landscape){
     .meter-wrap{ max-width:1000px; }
+    /* iPhone notch / Dynamic Island sits on the left (or right) in landscape.
+       Push body padding out to at least the safe-area inset so nothing hides
+       behind the camera island.  The card's own border-radius keeps it from
+       touching the screen edge on the opposite side. */
+    body{
+      padding-left:  max(10px, env(safe-area-inset-left));
+      padding-right: max(10px, env(safe-area-inset-right));
+      padding-top:   max(10px, env(safe-area-inset-top));
+      padding-bottom:max(10px, env(safe-area-inset-bottom));
+    }
   }
 
   .device{
